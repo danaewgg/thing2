@@ -259,82 +259,177 @@
         return releaseType
     end
     
-    function getTimingValue(shotType, ping)
-    	local lowPing = 40
-    	local mediumPing = 100
-    	local highPing = 200
-      
-      -- Find the timing values for the low, medium, and high ping values
-    	local lowPingTiming = tblSettings.tblTimings40[shotType] -- tblTimings[lowPing][shotType]
-    	local mediumPingTiming = tblSettings.tblTimings100[shotType] -- tblTimings[mediumPing][shotType]
-    	local highPingTiming = tblSettings.tblTimings200[shotType] -- tblTimings[highPing][shotType]
-      
-      -- Calculate the slope and y-intercept of the line using the low, medium, and high ping values
-    	local m = (highPingTiming - lowPingTiming) / (highPing - lowPing)
-    	local b = mediumPingTiming - m * mediumPing
-      
-      -- Use the calculated line to find the timing value for the given ping value
-    	return m * ping + b
+    function linearRegression(data)
+        -- Compute the mean of the independent and dependent variables
+        local meanX = 0
+        local meanY = 0
+        local count = 0
+    
+        for _, point in ipairs(data) do
+            if point[2] ~= 0 then  -- Only include points where the timing is not zero
+                meanX = meanX + point[1]
+                meanY = meanY + point[2]
+                count = count + 1
+            end
+        end
+        meanX = meanX / count
+        meanY = meanY / count
+    
+        -- Compute the variance and covariance of the independent and dependent variables
+        local varX = 0
+        local varY = 0
+        local covXY = 0
+    
+        for _, point in ipairs(data) do
+            if point[2] ~= 0 then  -- Only include points where the timing is not zero
+                local x = point[1]
+                local y = point[2]
+                varX = varX + (x - meanX)^2
+                varY = varY + (y - meanY)^2
+                covXY = covXY + (x - meanX) * (y - meanY)
+            end
+        end
+    
+        -- Estimate the slope and intercept of the regression line
+        local slope = covXY / varX
+        local intercept = meanY - slope * meanX
+    
+        -- Return the estimated model parameters
+        return slope, intercept
+    end
+    
+    function calculateShotTiming(shotType, ping)
+        print("Called shot")
+        -- Extract the timing values for the given shottype
+        local timingValues = Timings[shotType]
+    
+        -- Define the data points for the linear regression model
+        local data = {
+            [1] = {
+                [1] = 30, -- ping
+                [2] = timingValues[1] -- index
+            },
+            [2] = {
+                [1] = 40, -- ping
+                [2] = timingValues[2] -- index
+            },
+            [3] = {
+                [1] = 50, -- ping
+                [2] = timingValues[3] -- index
+            },
+            [4] = {
+                [1] = 60, -- ping
+                [2] = timingValues[4] -- index
+            },
+            [5] = {
+                [1] = 70, -- ping
+                [2] = timingValues[5] -- index
+            },
+            [6] = {
+                [1] = 80, -- ping
+                [2] = timingValues[6] -- index
+            },
+            [7] = {
+                [1] = 90, -- ping
+                [2] = timingValues[7] -- index
+            },
+            [8] = {
+                [1] = 100, -- ping
+                [2] = timingValues[8] -- index
+            },
+        }
+    
+        -- Estimate the model parameters for the linear regression model
+        local slope, intercept = linearRegression(data)
+    
+        -- Use the model to compute the predicted timing value for the given ping value
+        local timing = intercept + slope * ping
+    
+        local hasStreak = Character:GetAttribute("Streak")
+        if hasStreak then
+            local streakMeter = Character:GetAttribute("StreakMeter")
+            local streakType = Character:GetAttribute("StreakType")
+    
+            if shotType == "Standing Shot" or shotType == "Off Dribble Shot" or shotType == "Hopstep Off Dribble Shot" then
+                if streakMeter > 0 and streakType == "Spot-Up Shooter" then
+                    timing = timing - 0.05 -- Spot-Up timing
+                elseif streakMeter < 0 then
+                    timing = timing + 0.03 -- Cold timing
+                end
+            end
+        end
+    
+        local isQuickShot = Boosts:FindFirstChild("Quick Shot")
+        if isQuickShot and isQuickShot:GetAttribute("Activated") then
+            local quickShotTier = Character.Boosts["Quick Shot"].Value
+            timing = timing - quickShotTimings[quickShotTier]
+        end
+    
+        -- Return the predicted timing value
+        return timing
     end
     
     
-    local function noMeterPerfect()
-    	for k, v in pairs(tblSettings.tblTimings40) do
-    		local shotType = getShotType()
-    		if k == shotType then
-    			print(tblSettings.Signature, "Shot Type:", shotType)
-    			local ping = Ping:GetValue()
-    			local releaseTiming = getTimingValue(shotType, ping)
-    			repeat
-    				task.wait()
-    			until getShotMeter() >= tblSettings[usedTable][shotType]
-    			print(tblSettings.Signature, "Shot Meter:", getShotMeter())
-    			remotePath.ClientAction:FireServer("Shoot", false)
-    			print(tblSettings.Signature, "Landed:", getLandedShotMeter())
-    			print(tblSettings.Signature, getRelease())
-    			break
-    		end
-    	end  
-    end
+    function autoRelease(shotType)
+        if not getgenv().tblSettings.autoRelease then
+            return
+        end
     
-    local function meterPerfect()
-    	for k, v in pairs(tblSettings.tblTimings40) do
-    		local shotType = getShotType()
-    		local ping = Ping:GetValue()
-    		local releaseTiming = getTimingValue(shotType, ping)
-    		if k == shotType then
-    			if Character.ShotMeterUI.Enabled then
-    				repeat
-    					task.wait()
-    				until Character.ShotMeterUI.Meter.Bar.Size.Y.Scale >= (tblSettings[usedTable][shotType] - 0.05 or releaseTiming - 0.05)
-    			end
-    			if not Character.ShotMeterUI.Enabled then -- Shot Meter is not visible
-    				print(tblSettings.Signature, "Shot Type:", shotType)
-    				repeat
-    					task.wait()
-    				until Character["ShotMeterTiming"].Value >= (tblSettings[usedTable][shotType] - 0.1 or releaseTiming - 0.1)
-    				print(tblSettings.Signature, "Shot Meter:", getShotMeter())
-    				remotePath.ClientAction:FireServer("Shoot", false)
-    				print(tblSettings.Signature, "Landed:", getLandedShotMeter())
-    				print(tblSettings.Signature, getRelease())
-    				break
-    			else
-    				warn(tblSettings.Signature, "Issue with meterPerfect, alternating to noMeterPerfect")
-    				pcall(noMeterPerfect())
-    				break
-    			end
-    		end
-    	end
+        if not shotType then
+            shotType = Character:GetAttribute("ShotType")
+            
+            if shotType == nil then
+                notify("[ERROR] Auto-Release Cancelled", "ShotType is nil")
+                return
+            end
+        end
+        
+        local releaseTime = Timings[shotType]
+        if not releaseTime then
+            notify("[ERROR] Auto-Release Cancelled", "ShotType not found in table")
+            return
+        end
+        
+        local startTime = os.clock()
+        local function Shoot()
+            if (os.clock() - startTime) >= releaseTime then
+                ClientAction:FireServer("Shoot", false)
+                warn(string.format("Time taken: %.3f", os.clock() - startTime))
+                RunService:UnbindFromRenderStep("Auto-Release")
+            end
+        end
+    
+        local hasStreak = Character:GetAttribute("Streak")
+        if hasStreak then
+            local streakMeter = Character:GetAttribute("StreakMeter")
+            local streakType = Character:GetAttribute("StreakType")
+    
+            if shotType == "Standing Shot" or shotType == "Off Dribble Shot" or shotType == "Hopstep Off Dribble Shot" then
+                if streakMeter > 0 and streakType == "Spot-Up Shooter" then
+                    releaseTime = releaseTime - 0.05 -- Spot-Up timing
+                elseif streakMeter < 0 then
+                    releaseTime = releaseTime + 0.03 -- Cold timing
+                end
+            end
+        end
+    
+        local isQuickShot = Boosts:FindFirstChild("Quick Shot")
+        if isQuickShot and isQuickShot:GetAttribute("Activated") then
+            local quickShotTier = Character.Boosts["Quick Shot"].Value
+            releaseTime = releaseTime - quickShotTimings[quickShotTier]
+        end
+        
+        RunService:BindToRenderStep("Auto-Release", 0, Shoot)
     end
     
     local function aimbotPrep()
-    	if (Character:GetAttribute("ShootingAnim") or Character:GetAttribute("AlleyOop") == true) and tblSettings.autoRelease then
+    	if Character:GetAttribute("ShotType") ~= nil and tblSettings.autoRelease then
     		if getMeterSetting() ~= "Off" then -- Not off
     			print(tblSettings.Signature, "Calling meterPerfect")
-    			meterPerfect()
+    			autoRelease()
     		elseif getMeterSetting() == "Off" then -- Off
     			print(tblSettings.Signature, "Calling noMeterPerfect")
-    			noMeterPerfect()
+    			autoRelease()
     		else
     			warn(tblSettings.Signature, "Something went wrong with the ShootingAnim function")
     		end
