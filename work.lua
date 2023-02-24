@@ -10,8 +10,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Stats = game:GetService("Stats")
 
-local FrameRateManager = Stats:WaitForChild("FrameRateManager")
-
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local GameUI = PlayerGui:WaitForChild("GameUI")
