@@ -4,8 +4,6 @@ end
 
 -- [[ Variables ]]
 
-local clock = os.clock
-
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
